@@ -1,0 +1,535 @@
+{
+  "name": "AI Drug 1 webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are Drug Discovery AI.\n\nROLE:\nAn expert assistant for molecular drug discovery, using ONLY the provided Drug data. Never reference code, APIs, or implementation.\n\nINSTRUCTIONS:\n1️⃣ If this is a new session → set `isNewSession = true`\n\n2️⃣ If matching data is available:\n\n• First → Output the session flag in this exact format:\n  isNewSession=true/false#&\n\n• Then → Provide a brief 1–2 sentence summary of the compound.\n\n• After the summary → Present detailed data **only for available fields** in the following format:\n\n  Compound Name: [value]\n  SMILES: [value]\n  Property: [value]\n  Target: [value]\n  Notes: [value]\n\n➔ Do not include empty or missing fields in the output.\n\nOUTPUT FORMAT (Required):\nisNewSession=true/false#&\n[Summary text here]\n\nCompound Name: [value]\nSMILES: [value]\nProperty: [value]\nTarget: [value]\nNotes: [value]\n\n\n3️⃣ If NO matching data →\n❗ Respond with: \"No matching data found. Try another term.\"\n\nREMEMBER: Do not output or reference code, APIs, or implementation details.\n\nCONTEXT:\nUser Query: {{ $('UserInfo').first().json.chatInput }}\nDrug Data Result: {{ $json.output }}",
+        "options": {
+          "systemMessage": "You are a helpful assistant"
+        }
+      },
+      "id": "721a1db1-46d5-4fb1-8f39-f1b82d427545",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        300,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        328,
+        500
+      ],
+      "id": "2672ecc6-59f9-4058-b324-aafb846df142",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "WwRPLnaNaOWFS0V2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "13CZx2V-bMAk1-oCX_dR8W7dI59QxJdzPhvCK_0PuOG8",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "chemist",
+          "mode": "name"
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -140,
+        280
+      ],
+      "id": "d97894d6-48af-44fd-8cf7-9a7043cc8411",
+      "name": "Google Sheets - Get Data",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2XJKvRqzhlCutOFI",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"chatInput\":  \"{{ $json.chatInput.trim() }}\",\n  \"sessionId\": \"{{ $json.sessionId }}\",\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -360,
+        280
+      ],
+      "id": "ad900fcf-c0b2-46e7-bd86-eb96cbda157e",
+      "name": "UserInfo"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('UserInfo').first().json.sessionId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        500
+      ],
+      "id": "878749c6-6d71-495e-8ea6-1e421f2c3bb3",
+      "name": "Simple Memory",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { output: JSON.stringify($input.all().map(i => i.json), null, 2) } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        280
+      ],
+      "id": "b69810b3-eb02-4a81-a536-1647990863c7",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7dec58b1-83ee-4dbb-9fde-2d71722be281",
+              "leftValue": "={{ $json.isNewSession }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        280
+      ],
+      "id": "7a717336-f701-4c3a-9c39-3e825839b5a9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items, set isNewSession (1 or 0) and extract newOutput after '#&'\nfor (const item of $input.all()) {\n  const outputs = item.json.output ? item.json.output.split('#&') : [];\n\n  // Check if the first part (before #&) contains 'True'\n  item.json.isNewSession = outputs[0]?.includes('True') ? 1 : 0;\n\n  // Assign the second part (after #&) to newOutput, or '' if missing\n  item.json.output = outputs[1] ? outputs[1].trim() : '';\n}\n\nreturn $input.all();\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        676,
+        280
+      ],
+      "id": "acccd007-2b3c-4b1e-a088-87bf4b87792e",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "sendTo": "padmavaishnavit@gmail.com",
+        "subject": "New Drug Discovery Session Started",
+        "message": "= New session started. User asked:{{ $('Webhook').item.json.query.chatInput }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1116,
+        80
+      ],
+      "id": "1560a612-39f5-4ec3-9b94-59bdab2e0992",
+      "name": "Gmail1",
+      "webhookId": "9923869b-dc48-4b82-962f-7f44e246528f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LoaiuOXvDA3pj3nG",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7dec58b1-83ee-4dbb-9fde-2d71722be281",
+              "leftValue": "={{ $('Code1').isExecuted }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1336,
+        155
+      ],
+      "id": "df6f5c8f-b304-4348-a6fe-71497f28c5b2",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "\n{\n\"output\": \"👋 Hi! I'm your Drug Discovery Assistant. Ask me about compounds, properties, or targets.\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1560,
+        -220
+      ],
+      "id": "0dabf962-9e50-422f-bd19-dbc21250a93d",
+      "name": "Defult_output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.query.chatInput.toLowerCase().trim() }}",
+              "operation": "regex",
+              "value2": "^\\s*(hi|hello|hey|gm|gn|good\\s+(morning|night|evening|afternoon))\\s*[.!]*$"
+            }
+          ]
+        }
+      },
+      "name": "Greeting Detection",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        155
+      ],
+      "id": "b3ffc40d-25ca-46f7-acb8-6b7d5cf51a75"
+    },
+    {
+      "parameters": {
+        "path": "26415194-a184-49cc-9cef-d3bee524c344",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        160
+      ],
+      "id": "55917abc-7ef4-4fb0-9d72-383c8c0e8454",
+      "name": "Webhook",
+      "webhookId": "26415194-a184-49cc-9cef-d3bee524c344"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=👋 Hi! I'm your Drug Discovery Assistant. Ask me about compounds, properties, or targets.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1640,
+        100
+      ],
+      "id": "2db52ac7-2829-47e0-b5b1-12a621fb2398",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1660,
+        260
+      ],
+      "id": "02ec1da5-e4df-4be7-8539-7df4d4ea3acc",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "55a5054c-fc4f-4e0f-bef3-fe0f8382d5cc",
+              "name": "output",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1700,
+        560
+      ],
+      "id": "d628c520-d127-411d-99e1-fa6ba9f7ab1d",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "myselfvaish.app.n8n.cloud",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-encoding": "gzip, br",
+            "accept-language": "en-US,en;q=0.9,ta;q=0.8",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "2401:4900:606f:de68:b411:d658:c0d3:2a0b",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "IN",
+            "cf-ray": "954be5c710837f6e-MAA",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "cookie": "_fbp=fb.1.1745934810952.52827212265928164; rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2FNmdFYSrT0YpcP0rCxgdKKyeWK44DR6G8%3D; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX1%2FSsS0tOBoj%2BRlM4iBJ0xcqC7WWIpVZHUM%3D; _gid=GA1.2.1529843923.1750585490; _gcl_au=1.1.1688551434.1750674265; _ga=GA1.2.781625663.1750674262; _ga_1EB8LCPG5B=GS2.2.s1750763508$o7$g1$t1750763578$j60$l0$h0; n8n-auth=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImJiY2FiOWQyLWZmNDYtNDU2MC05Zjg0LWE2M2IxMTgwMWQ4MCIsImhhc2giOiJZSVp1K0RnYTlHIiwiaWF0IjoxNzUwNzYzNTk5LCJleHAiOjE3NTEzNjgzOTl9.ECdex5OqIV2HTgeU3wVgfz2jO3GKu432yFs9i3EmVF8; _ga_0SC4FF2FH9=GS2.1.s1750763503$o4$g1$t1750763601$j37$l0$h0; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX1%2BwvsKLM6FW%2FxtOIjST4rVDSV3vElPsUWfsE%2FvjP5r9TUxoid6FLb2iFPB3PKc0ipYpB2Go1rfPJw%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2B%2BPz3z0fxI1Tp910tF7NVRt%2FlD%2FKvtxOKAosOTP4ALbfMDs%2FOlDu%2BBT8no%2BaylTauUZP073Pp%2BIl1Dtsw1Ugik9IA3YT5YggINLuhydQSBduImLXGuKFm%2BULO3QcSfUB02sY5E0qfdmxd2IliioeVF%2FK%2B1fIXC18o%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX19T5PFiY6vE6ahRfXw2GA8nlvEb91rjki6831T8yhEL6qG0Za4h7OyX%2F22w2ohhTiLNTkiJzIVpGd3dvKcOC%2FOrCRTZg1tWrqB3JQVKlBfMPcNTJTGZsAPu%2FRV6LY4Fk%2BX2wloJMsXJSlsZI5Vq4q7drDAGwCakqtA%3D; n8n_anonymous_id=63331a80-814c-4073-a493-609c8e18906c; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FPudNpUYw2v%2Bq6EGdN6zO4YLZrJzePH9oPfrWR0MxBQFYKqyvdEM%2BAqeKIL6XoHfBvFXxnsyFaGSqCgF4d%2Fx3c6eSNFlXFakEocGL%2BU5l5%2BcrsG3g6alf5iJzT7neGyiL7x8ErsIigBg%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22distinct_id%22%3A%22d5f0ae7ff7ac0579ddd0fee486a93338aeb5bb1fe83bf493b8b3271ecea04590%23bbcab9d2-ff46-4560-9f84-a63b11801d80%22%2C%22%24sesid%22%3A%5B1750764648347%2C%220197a1a4-b737-70ec-8299-0eca04a2e862%22%2C1750763616055%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fpadmavaishnavi.app.n8n.cloud%2Fworkflows%22%7D%7D",
+            "priority": "u=0, i",
+            "sec-ch-ua": "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "none",
+            "sec-fetch-user": "?1",
+            "upgrade-insecure-requests": "1",
+            "x-forwarded-for": "2401:4900:606f:de68:b411:d658:c0d3:2a0b, 172.68.146.162",
+            "x-forwarded-host": "myselfvaish.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-90-644db48b77-rp4s7",
+            "x-is-trusted": "yes",
+            "x-real-ip": "2401:4900:606f:de68:b411:d658:c0d3:2a0b"
+          },
+          "params": {},
+          "query": {
+            "chatInput": "hi"
+          },
+          "body": {},
+          "webhookUrl": "https://myselfvaish.app.n8n.cloud/webhook-test/26415194-a184-49cc-9cef-d3bee524c344",
+          "executionMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Data": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UserInfo": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Gmail1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Greeting Detection": {
+      "main": [
+        [
+          {
+            "node": "Gmail1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "UserInfo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Greeting Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "88820233-363a-4854-94d4-5bd131bc59f0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d5f0ae7ff7ac0579ddd0fee486a93338aeb5bb1fe83bf493b8b3271ecea04590"
+  },
+  "id": "OULFmMnC73vNUoVz",
+  "tags": []
+}
